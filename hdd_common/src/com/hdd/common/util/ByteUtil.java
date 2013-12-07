@@ -1,7 +1,6 @@
 package com.hdd.common.util;
 
 import java.io.UnsupportedEncodingException;
-import java.nio.BufferOverflowException;
 import java.nio.ByteBuffer;
 
 /**
@@ -12,255 +11,8 @@ import java.nio.ByteBuffer;
  */
 public class ByteUtil {
     private static final char[] hex = "0123456789ABCDEF".toCharArray();
-    private ByteBuffer byteBuff = null;
     private static String encode = "GBK";
 
-    public ByteUtil(){
-
-    }
-    /**
-     * 用指定长度初始化byteBuff
-     * 
-     * @param length
-     */
-    public void initialByteBuffer(int length) {
-        byteBuff = ByteBuffer.allocate(length >= 0 ? length : 1);
-    }
-
-    /**
-     * 向字节流中填充一个字节
-     */
-    public ByteBuffer appendByte(byte b) throws BufferOverflowException {
-        byteBuff.put(b);
-        return byteBuff;
-    }
-
-    /**
-     * 向字节流中填充一个字节
-     */
-    public ByteBuffer appendByte(Byte b) throws BufferOverflowException {
-        byteBuff.put(b == null ? 0 : b.byteValue());
-        return byteBuff;
-    }
-
-    /**
-     * 向字节流中填充字节数组
-     */
-    public ByteBuffer appendBytes(byte[] b) throws BufferOverflowException {
-        if (b == null || b.length == 0) {
-            return byteBuff;
-        }
-        this.byteBuff.put(b);
-        return byteBuff;
-    }
-
-    /**
-     * 向字节流中填充字节数组
-     */
-    public ByteBuffer appendBytes(Byte[] B) throws BufferOverflowException {
-        if (B == null || B.length == 0) {
-            return byteBuff;
-        }
-        int length = B.length;
-        byte[] b = new byte[B.length];
-        for (int i = 0; i < length; i++) {
-            b[i] = B[i].byteValue();
-        }
-        this.byteBuff.put(b);
-        return byteBuff;
-    }
-
-    /**
-     * 向字节流中填充一个整数
-     */
-    public ByteBuffer appendInt(int b) throws BufferOverflowException {
-        byteBuff.putInt(b);
-        return byteBuff;
-    }
-
-    /**
-     * 向字节流中填充一个整数
-     */
-    public ByteBuffer appendInt(Integer b) throws BufferOverflowException {
-        byteBuff.putInt(b == null ? 0 : b.intValue());
-        return byteBuff;
-    }
-
-    /**
-     * 向字节流中填充一个长整数
-     */
-    public ByteBuffer appendLong(long b) throws BufferOverflowException {
-        byteBuff.putLong(b);
-        return byteBuff;
-    }
-
-    /**
-     * 向字节流中填充一个长整数
-     */
-    public ByteBuffer appendLong(Long b) throws BufferOverflowException {
-        byteBuff.putLong(b == null ? 0 : b.longValue());
-        return byteBuff;
-    }
-
-    /**
-     * 向字节流中填充一个短整数
-     */
-    public ByteBuffer appendShort(short b) throws BufferOverflowException {
-        byteBuff.putShort(b);
-        return byteBuff;
-    }
-
-    /**
-     * 向字节流中填充一个短整数
-     */
-    public ByteBuffer appendShort(Short b) throws BufferOverflowException {
-        byteBuff.putShort(b == null ? 0 : b.shortValue());
-        return byteBuff;
-    }
-
-    /**
-     * 向字节流中填充一个指定长度的字符串的GBK编码值
-     */
-    public ByteBuffer appendString(String str, int byteLength) throws BufferOverflowException, UnsupportedEncodingException {
-        this.appendString(str, byteLength, this.encode);
-        return byteBuff;
-    }
-
-    /**
-     * 以enc指定的编码格式向字节流中填充指定长度的字符串
-     */
-    public ByteBuffer appendString(String str, int byteLength, String enc) throws BufferOverflowException, UnsupportedEncodingException {
-        if (byteLength <= 0) {
-            return byteBuff;
-        }
-        byte[] arr = str == null ? new byte[0] : str.getBytes(enc);
-        byte[] dest = new byte[byteLength];
-        int len = arr.length;
-        int copyLen = len > byteLength ? byteLength : len;
-        System.arraycopy(arr, 0, dest, 0, copyLen);
-        byteBuff.put(dest);
-        return byteBuff;
-    }
-
-    /**
-     * 填充用16进制字符串承载的字节流
-     * 
-     * @throws Exception
-     */
-    public ByteBuffer appendHex(String hex, int byteLength) throws Exception {
-        if (null == hex || "".equals(hex)) {
-            for (int i = 0; i < byteLength; i++) {
-                this.appendByte(new Byte("0"));
-            }
-        } else {
-            if (hex.length() / 2 > byteLength) {
-                throw new Exception("非法填充：待填充的字节流大于分配的字节空间！");
-            }
-            for (int i = 0; i < hex.length(); i += 2) {
-                Short temp = Short.parseShort(hex.substring(i, i + 2), 16);
-                this.appendByte(temp.byteValue());
-            }
-            for (int i = 0; i < byteLength - hex.length() / 2; i++) {
-                this.appendByte(new Byte("0"));
-            }
-        }
-        return byteBuff;
-    }
-
-    /**
-     * 从ByteBuffer中获取所有的字节
-     * 
-     * @return
-     */
-    public byte[] getBytes() {
-        return this.byteBuff == null ? new byte[0] : this.byteBuff.array();
-    }
-
-    /**
-     * 从ByteBuffer中获取指定长度的字节数
-     * 
-     * @param length
-     * @return
-     */
-    public byte[] getBytes(int length) {
-        length = length < 0 ? 0 : length;
-        byte[] b = new byte[length];
-        if (length == 0) {
-            return b;
-        }
-        this.byteBuff.get(b);
-        return b;
-    }
-
-    /**
-     * 从ByteBuffer中获取一个字节对象
-     * 
-     * @return
-     */
-    public Byte getByte() throws BufferOverflowException {
-        return new Byte(this.byteBuff.get());
-    }
-
-    /**
-     * 从ByteBuffer中获取一个短整型数对象
-     * 
-     * @return
-     */
-    public Short getShort() throws BufferOverflowException {
-        return new Short(this.byteBuff.getShort());
-    }
-
-    /**
-     * 从ByteBuffer中获取一个整数对象
-     * 
-     * @return
-     */
-    public Integer getInt() throws BufferOverflowException {
-        return new Integer(this.byteBuff.getInt());
-    }
-
-    /**
-     * 从ByteBuffer中获取一个长整数对象
-     * 
-     * @return
-     */
-    public Long getLong() throws BufferOverflowException {
-        return new Long(this.byteBuff.getLong());
-    }
-
-    /**
-     * 从ByteBuffer中获取指定长度的字符串
-     * 
-     * @return
-     */
-    public String getString(int byteLength) throws BufferOverflowException, UnsupportedEncodingException {
-        byte[] b = new byte[byteLength];
-        this.byteBuff.get(b);
-        int i = -1;
-        while (b[++i] != 0 && i < byteLength - 1) {
-            ;
-        }
-        return new String(b, 0, i, this.encode);
-    }
-
-    /**
-     * 从ByteBuffer中获取指定长度的字符串
-     * 
-     * @return
-     */
-    public String getHexString(int byteLength) throws BufferOverflowException, UnsupportedEncodingException {
-        byte[] b = new byte[byteLength];
-        this.byteBuff.get(b);
-        // bytesToHexString(b);
-        return bytesToHexString(b);
-    }
-
-    /**
-     * 
-     * 描述信息:
-     * 
-     * @author David
-     */
     public static String asciiToString(String asc) {
         if (asc == null || asc.length() == 0 || asc.length() % 2 != 0) {
             return "";
@@ -278,28 +30,6 @@ public class ByteUtil {
             e.printStackTrace();
         }
         return temp;
-    }
-
-    /**
-     * @return the byteBuff
-     */
-    public ByteBuffer getByteBuff() {
-        return byteBuff;
-    }
-
-    /**
-     * @return the encode
-     */
-    public String getEncode() {
-        return encode;
-    }
-
-    /**
-     * @param encode
-     *            the encode to set
-     */
-    public void setEncode(String encode) {
-        this.encode = encode;
     }
 
     public static String getHexString(String value, String datatype, int length) {
@@ -558,7 +288,7 @@ public class ByteUtil {
     // *********************************end*********************************************************
 
     public static void main(String[] args) {
-        byte[] bytes = new byte[] {(byte) 0xff, (byte) 0xff,(byte) 0xff,(byte) 0xff};
+        byte[] bytes = new byte[] {(byte) 0xff, (byte) 0xff, (byte) 0xff, (byte) 0xff};
         System.out.println(getLong(bytes));
         System.out.println(getInt(bytes));
     }
