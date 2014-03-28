@@ -106,5 +106,10 @@ public class TripleDes {
         }
         return null;
     }
+    
+    public static void main(String args[]){
+        TripleDes ed  = new TripleDes();
+        System.out.print(ed.encrypt("Zte0744~", "QE!@^&0(J6H#$%DRN*$v7rnt"));
+    }
 
 }

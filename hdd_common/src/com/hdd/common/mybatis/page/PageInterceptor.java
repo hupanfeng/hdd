@@ -5,6 +5,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Properties;
+import java.util.Random;
 
 import org.apache.ibatis.executor.parameter.ParameterHandler;
 import org.apache.ibatis.executor.statement.StatementHandler;
@@ -12,6 +13,7 @@ import org.apache.ibatis.logging.Log;
 import org.apache.ibatis.logging.LogFactory;
 import org.apache.ibatis.mapping.BoundSql;
 import org.apache.ibatis.mapping.MappedStatement;
+import org.apache.ibatis.mapping.ParameterMapping;
 import org.apache.ibatis.plugin.Interceptor;
 import org.apache.ibatis.plugin.Intercepts;
 import org.apache.ibatis.plugin.Invocation;
@@ -28,7 +30,7 @@ import org.apache.ibatis.session.RowBounds;
 
 /**
  * 通过拦截<code>StatementHandler</code>的<code>prepare</code>方法，重写sql语句实现物理分页。
- * 老规矩，签名里要拦截的类型只能是接口。
+ * 目前支持mysql、oracle和sybase的分页，其它数据库暂不支持。
  * 
  * @author 湖畔微风
  * 
@@ -80,15 +82,17 @@ public class PageInterceptor implements Interceptor {
                 PageParameter page = (PageParameter) metaStatementHandler
                         .getValue("delegate.boundSql.parameterObject.page");
                 String sql = boundSql.getSql();
+
+                Connection connection = (Connection) invocation.getArgs()[0];
+                // 重设分页参数里的总页数等
+                setPageParameter(sql, connection, mappedStatement, boundSql, page, configuration);
+
                 // 重写sql
                 String pageSql = buildPageSql(sql, page);
                 metaStatementHandler.setValue("delegate.boundSql.sql", pageSql);
                 // 采用物理分页后，就不需要mybatis的内存分页了，所以重置下面的两个参数
                 metaStatementHandler.setValue("delegate.rowBounds.offset", RowBounds.NO_ROW_OFFSET);
                 metaStatementHandler.setValue("delegate.rowBounds.limit", RowBounds.NO_ROW_LIMIT);
-                Connection connection = (Connection) invocation.getArgs()[0];
-                // 重设分页参数里的总页数等
-                setPageParameter(sql, connection, mappedStatement, boundSql, page);
             }
         }
         // 将执行权交给下一个拦截器
@@ -104,18 +108,32 @@ public class PageInterceptor implements Interceptor {
      * @param mappedStatement
      * @param boundSql
      * @param page
+     * @param configuration
      */
     private void setPageParameter(String sql, Connection connection, MappedStatement mappedStatement,
-            BoundSql boundSql, PageParameter page) {
+            BoundSql boundSql, PageParameter page, Configuration configuration) {
         // 记录总记录数
-        String countSql = "select count(0) from (" + sql + ") as total";
+        String countSql = "select count(0) from (" + sql + ") total";
         PreparedStatement countStmt = null;
         ResultSet rs = null;
         try {
             countStmt = connection.prepareStatement(countSql);
             BoundSql countBS = new BoundSql(mappedStatement.getConfiguration(), countSql,
                     boundSql.getParameterMappings(), boundSql.getParameterObject());
+
+            // 从原有BoundSql中获取参数映射，设置到count的BoundSql中，这样就可以在配置文件中使用bind标签
+            for (ParameterMapping pm : boundSql.getParameterMappings()) {
+                String property = pm.getProperty();
+                if (null != property && "" != property) {
+                    Object value = boundSql.getAdditionalParameter(property);
+                    if (value != null) {
+                        countBS.setAdditionalParameter(property, value);
+                    }
+                }
+            }
+
             setParameters(countStmt, mappedStatement, countBS, boundSql.getParameterObject());
+
             rs = countStmt.executeQuery();
             int totalCount = 0;
             if (rs.next()) {
@@ -166,11 +184,18 @@ public class PageInterceptor implements Interceptor {
      */
     private String buildPageSql(String sql, PageParameter page) {
         if (page != null) {
+            boolean resetFlag = (page.getCurrentPage() - 1) * page.getPageSize() > page.getTotalCount();
+            if (resetFlag || (page.getCurrentPage() > page.getTotalPage())) {
+                page.setCurrentPage(page.getTotalPage());
+            }
+
             StringBuilder pageSql = new StringBuilder();
             if ("mysql".equals(dialect)) {
                 pageSql = buildPageSqlForMysql(sql, page);
             } else if ("oracle".equals(dialect)) {
                 pageSql = buildPageSqlForOracle(sql, page);
+            } else if ("sybase".equals(dialect)) {
+                pageSql = buildPageSqlForSybase(sql, page);
             } else {
                 return sql;
             }
@@ -192,6 +217,43 @@ public class PageInterceptor implements Interceptor {
         String beginrow = String.valueOf((page.getCurrentPage() - 1) * page.getPageSize());
         pageSql.append(sql);
         pageSql.append(" limit " + beginrow + "," + page.getPageSize());
+        return pageSql;
+    }
+
+    /**
+     * 使用临时表完成分页.为防止临时表数据过大，当查询的数据起始数超过总数的一半后，
+     * 采用逆序的方式查询数据，并在临时表里再采用相反的顺序将数据重新排序。 因此在使用 sybase分页查询时，必须显示的指定排序字段和排序顺序。
+     * 
+     * @param sql
+     * @param page
+     * @return String
+     */
+    public static StringBuilder buildPageSqlForSybase(String sql, PageParameter page) {
+        StringBuilder pageSql = new StringBuilder(100);
+        int beginrow = (page.getCurrentPage() - 1) * page.getPageSize();
+        int endrow = page.getCurrentPage() * page.getPageSize();
+
+        // 临时表随机命名，防止名称冲突
+        String temp = "#temp" + new Random().nextInt(1000000);
+        String fromSql = sql.substring(sql.indexOf("from"));
+        String order = "";
+        String tempOrder = "asc";
+        if (beginrow * 2 > page.getTotalCount()) {
+            if (fromSql.lastIndexOf("desc") > 0) {
+                order = "asc";
+                fromSql = fromSql.substring(0, fromSql.lastIndexOf("desc")) + order;
+            } else if (fromSql.lastIndexOf("asc") > 0) {
+                order = "desc";
+                fromSql = fromSql.substring(0, fromSql.lastIndexOf("asc")) + order;
+            }
+            tempOrder = "desc";
+        }
+
+        pageSql.append("select top ").append(endrow).append(" *,rownum=identity(int) into ").append(temp).append(" ");
+        pageSql.append(fromSql).append(" ");
+        pageSql.append("select * from ").append(temp).append(" where rownum > ").append(beginrow)
+                .append(" order by rownum ").append(tempOrder).append(" ");
+        pageSql.append("drop table " + temp);
         return pageSql;
     }
 
@@ -227,5 +289,4 @@ public class PageInterceptor implements Interceptor {
     @Override
     public void setProperties(Properties properties) {
     }
-
 }

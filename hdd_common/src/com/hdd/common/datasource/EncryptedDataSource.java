@@ -13,7 +13,6 @@ import com.hdd.common.encrypt.TripleDes;
  */
 public class EncryptedDataSource extends org.apache.tomcat.jdbc.pool.DataSource {
     private static Logger log = LoggerFactory.getLogger(EncryptedDataSource.class);
-    private final String key = "QE!@^&0(J6H#$%DRN*$v7rnt";
     private final TripleDes des = new TripleDes();
 
     @Override
@@ -22,6 +21,7 @@ public class EncryptedDataSource extends org.apache.tomcat.jdbc.pool.DataSource 
     }
 
     private String decrptPassword(String password) {
+        final String key = "QE!@^&0(J6H#$%DRN*$v7rnt";
         String dePassword = null;
         try {
             dePassword = des.decrypt(password, key);

@@ -90,7 +90,7 @@ public class CacheInterceptor implements Interceptor {
             Cache cache = ms.getCache();
             if (cache != null) {
                 if (ms.isUseCache() && resultHandler == null) {
-                    if (!(boolean) metaExecutor.getValue("dirty")) {
+                    if (!(Boolean) metaExecutor.getValue("dirty")) {
                         cache.getReadWriteLock().readLock().lock();
                         try {
                             Object value = cache.getObject(cacheKey);
