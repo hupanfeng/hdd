@@ -1,10 +1,14 @@
 package com.hdd.common.mybatis.page;
 
+import java.io.Serializable;
+
 /**
  * 分页参数类
  * 
  */
-public class PageParameter {
+public class PageParameter implements Serializable {
+
+    private static final long serialVersionUID = 1L;
 
     public static final int DEFAULT_PAGE_SIZE = 10;
 

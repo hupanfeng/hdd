@@ -1,6 +1,7 @@
 package com.hdd.common.mybatis.mapper.annotation;
 
 import java.lang.annotation.ElementType;
+import java.lang.annotation.Inherited;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
@@ -15,6 +16,7 @@ import org.apache.ibatis.type.JdbcType;
  */
 @Retention(RetentionPolicy.RUNTIME)
 @Target(ElementType.FIELD)
+@Inherited
 public @interface FieldMapperAnnotation {
     /**
      * 
@@ -25,8 +27,7 @@ public @interface FieldMapperAnnotation {
     /**
      * 
      * 
-     * 字段用JDBC接口存入数据库需要设置的数据类型,Integer,Long,Short,Float,Double,String,Date
-     * ,Timestamp,Time
+     * 字段用JDBC接口存入数据库需要设置的数据类型,Integer,Long,Short,Float,Double,String,Date ,Timestamp,Time
      */
     JdbcType jdbcType();
 }

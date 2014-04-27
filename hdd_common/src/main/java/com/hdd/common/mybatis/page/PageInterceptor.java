@@ -29,8 +29,7 @@ import org.apache.ibatis.session.Configuration;
 import org.apache.ibatis.session.RowBounds;
 
 /**
- * 通过拦截<code>StatementHandler</code>的<code>prepare</code>方法，重写sql语句实现物理分页。
- * 目前支持mysql、oracle和sybase的分页，其它数据库暂不支持。
+ * 通过拦截<code>StatementHandler</code>的<code>prepare</code>方法，重写sql语句实现物理分页。 目前支持mysql、oracle和sybase的分页，其它数据库暂不支持。
  * 
  * @author 湖畔微风
  * 
@@ -48,8 +47,7 @@ public class PageInterceptor implements Interceptor {
     @Override
     public Object intercept(Invocation invocation) throws Throwable {
         StatementHandler statementHandler = (StatementHandler) invocation.getTarget();
-        MetaObject metaStatementHandler = MetaObject.forObject(statementHandler, DEFAULT_OBJECT_FACTORY,
-                DEFAULT_OBJECT_WRAPPER_FACTORY);
+        MetaObject metaStatementHandler = MetaObject.forObject(statementHandler, DEFAULT_OBJECT_FACTORY, DEFAULT_OBJECT_WRAPPER_FACTORY);
         // 分离代理对象链(由于目标类可能被多个拦截器拦截，从而形成多次代理，通过下面的两次循环可以分离出最原始的的目标类)
         while (metaStatementHandler.hasGetter("h")) {
             Object object = metaStatementHandler.getValue("h");
@@ -79,8 +77,7 @@ public class PageInterceptor implements Interceptor {
             if (parameterObject == null) {
                 throw new NullPointerException("parameterObject is null!");
             } else {
-                PageParameter page = (PageParameter) metaStatementHandler
-                        .getValue("delegate.boundSql.parameterObject.page");
+                PageParameter page = (PageParameter) metaStatementHandler.getValue("delegate.boundSql.parameterObject.page");
                 String sql = boundSql.getSql();
 
                 Connection connection = (Connection) invocation.getArgs()[0];
@@ -100,8 +97,7 @@ public class PageInterceptor implements Interceptor {
     }
 
     /**
-     * 从数据库里查询总的记录数并计算总页数，回写进分页参数<code>PageParameter</code>,这样调用者就可用通过 分页参数
-     * <code>PageParameter</code>获得相关信息。
+     * 从数据库里查询总的记录数并计算总页数，回写进分页参数<code>PageParameter</code>,这样调用者就可用通过 分页参数 <code>PageParameter</code>获得相关信息。
      * 
      * @param sql
      * @param connection
@@ -110,16 +106,16 @@ public class PageInterceptor implements Interceptor {
      * @param page
      * @param configuration
      */
-    private void setPageParameter(String sql, Connection connection, MappedStatement mappedStatement,
-            BoundSql boundSql, PageParameter page, Configuration configuration) {
+    private void setPageParameter(String sql, Connection connection, MappedStatement mappedStatement, BoundSql boundSql,
+            PageParameter page, Configuration configuration) {
         // 记录总记录数
-        String countSql = "select count(0) from (" + sql + ") total";
+        String countSql = "select count(1) from (" + sql + ") total";
         PreparedStatement countStmt = null;
         ResultSet rs = null;
         try {
             countStmt = connection.prepareStatement(countSql);
-            BoundSql countBS = new BoundSql(mappedStatement.getConfiguration(), countSql,
-                    boundSql.getParameterMappings(), boundSql.getParameterObject());
+            BoundSql countBS = new BoundSql(mappedStatement.getConfiguration(), countSql, boundSql.getParameterMappings(),
+                    boundSql.getParameterObject());
 
             // 从原有BoundSql中获取参数映射，设置到count的BoundSql中，这样就可以在配置文件中使用bind标签
             for (ParameterMapping pm : boundSql.getParameterMappings()) {
@@ -142,7 +138,6 @@ public class PageInterceptor implements Interceptor {
             page.setTotalCount(totalCount);
             int totalPage = totalCount / page.getPageSize() + ((totalCount % page.getPageSize() == 0) ? 0 : 1);
             page.setTotalPage(totalPage);
-
         } catch (SQLException e) {
             logger.error("Ignore this exception", e);
         } finally {
@@ -157,7 +152,6 @@ public class PageInterceptor implements Interceptor {
                 logger.error("Ignore this exception", e);
             }
         }
-
     }
 
     /**
@@ -169,8 +163,8 @@ public class PageInterceptor implements Interceptor {
      * @param parameterObject
      * @throws SQLException
      */
-    private void setParameters(PreparedStatement ps, MappedStatement mappedStatement, BoundSql boundSql,
-            Object parameterObject) throws SQLException {
+    private void setParameters(PreparedStatement ps, MappedStatement mappedStatement, BoundSql boundSql, Object parameterObject)
+            throws SQLException {
         ParameterHandler parameterHandler = new DefaultParameterHandler(mappedStatement, parameterObject, boundSql);
         parameterHandler.setParameters(ps);
     }
@@ -186,7 +180,7 @@ public class PageInterceptor implements Interceptor {
         if (page != null) {
             boolean resetFlag = (page.getCurrentPage() - 1) * page.getPageSize() > page.getTotalCount();
             if (resetFlag || (page.getCurrentPage() > page.getTotalPage())) {
-                page.setCurrentPage(page.getTotalPage());
+                page.setCurrentPage(page.getTotalPage() == 0 ? 1 : page.getTotalPage());
             }
 
             StringBuilder pageSql = new StringBuilder();
@@ -221,8 +215,7 @@ public class PageInterceptor implements Interceptor {
     }
 
     /**
-     * 使用临时表完成分页.为防止临时表数据过大，当查询的数据起始数超过总数的一半后，
-     * 采用逆序的方式查询数据，并在临时表里再采用相反的顺序将数据重新排序。 因此在使用 sybase分页查询时，必须显示的指定排序字段和排序顺序。
+     * 使用临时表完成分页.为防止临时表数据过大，当查询的数据起始数超过总数的一半后， 采用逆序的方式查询数据，并在临时表里再采用相反的顺序将数据重新排序。 因此在使用 sybase分页查询时，必须显示的指定排序字段和排序顺序。
      * 
      * @param sql
      * @param page
@@ -251,8 +244,8 @@ public class PageInterceptor implements Interceptor {
 
         pageSql.append("select top ").append(endrow).append(" *,rownum=identity(int) into ").append(temp).append(" ");
         pageSql.append(fromSql).append(" ");
-        pageSql.append("select * from ").append(temp).append(" where rownum > ").append(beginrow)
-                .append(" order by rownum ").append(tempOrder).append(" ");
+        pageSql.append("select * from ").append(temp).append(" where rownum > ").append(beginrow).append(" order by rownum ")
+                .append(tempOrder).append(" ");
         pageSql.append("drop table " + temp);
         return pageSql;
     }
