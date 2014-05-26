@@ -29,7 +29,7 @@ public class RandomCodeUtil {
      * @throws IOException
      * @author david
      * 
-     * 完成日期: 2013-7-17
+     *         完成日期: 2013-7-17
      */
     public static void genRandom(HttpServletRequest request, HttpServletResponse response) throws IOException {
         // 首先设置页面不缓存
@@ -38,7 +38,7 @@ public class RandomCodeUtil {
         response.setDateHeader("Expires", 0);
 
         // 定义图片的宽度和高度
-        int width = 70, height = 25;
+        int width = 100, height = 36;
         // 创建一个图像对象
         BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
         // 得到图像的环境对象
@@ -46,7 +46,7 @@ public class RandomCodeUtil {
 
         Random random = new Random();
         // 用随机颜色填充图像背景
-        g.setColor(getRandColor(180, 250));
+        // g.setColor(getRandColor(180, 250));
         g.fillRect(0, 0, width, height);
         for (int i = 0; i < 5; i++) {
             g.setColor(getRandColor(50, 100));
@@ -55,8 +55,8 @@ public class RandomCodeUtil {
             g.drawOval(x, y, 4, 4);
         }
 
-        char[] codeSequence = {'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q',
-                'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9'};
+        char[] codeSequence = {'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'J', 'K', 'L', 'M', 'N', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W',
+                'X', 'Y', 'Z', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9'};
         // 随机字符串
         String sRand = "";
 
@@ -67,7 +67,7 @@ public class RandomCodeUtil {
         g.setFont(new Font("", Font.PLAIN, fontHeight));
         for (int i = 0; i < 4; i++) {
             // 生成四个随机字符
-            String rand = String.valueOf(codeSequence[random.nextInt(36)]);
+            String rand = String.valueOf(codeSequence[random.nextInt(34)]);
             sRand += rand;
             // 生成随机颜色
             g.setColor(new Color(20 + random.nextInt(80), 20 + random.nextInt(100), 20 + random.nextInt(90)));
