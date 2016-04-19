@@ -22,7 +22,9 @@ import org.apache.ibatis.plugin.Intercepts;
 import org.apache.ibatis.plugin.Invocation;
 import org.apache.ibatis.plugin.Plugin;
 import org.apache.ibatis.plugin.Signature;
+import org.apache.ibatis.reflection.DefaultReflectorFactory;
 import org.apache.ibatis.reflection.MetaObject;
+import org.apache.ibatis.reflection.ReflectorFactory;
 import org.apache.ibatis.reflection.factory.DefaultObjectFactory;
 import org.apache.ibatis.reflection.factory.ObjectFactory;
 import org.apache.ibatis.reflection.wrapper.DefaultObjectWrapperFactory;
@@ -35,30 +37,30 @@ import org.apache.ibatis.transaction.Transaction;
  * 修正使用sql自动生成插件导致的BatchExecutor无法正常使用的BUG。
  * 如果项目中配置了sql自动生成插件则务必要同时配置本插件，
  * 若没有使用或不使用批量更新功能则没必要使用本插件。
- * 
+ *
  * @author 湖畔微风
- * 
  */
 @Intercepts({@Signature(type = Executor.class, method = "update", args = {MappedStatement.class, Object.class})})
 public class BatchInterceptor implements Interceptor {
     private static final Log logger = LogFactory.getLog(BatchInterceptor.class);
     private static final ObjectFactory DEFAULT_OBJECT_FACTORY = new DefaultObjectFactory();
     private static final ObjectWrapperFactory DEFAULT_OBJECT_WRAPPER_FACTORY = new DefaultObjectWrapperFactory();
+    private static final ReflectorFactory DEFAULT_REFLECTOR_FACTORY = new DefaultReflectorFactory();
 
     @Override
     public Object intercept(Invocation invocation) throws Throwable {
         Executor executorProxy = (Executor) invocation.getTarget();
         MetaObject metaExecutor = MetaObject.forObject(executorProxy, DEFAULT_OBJECT_FACTORY,
-                DEFAULT_OBJECT_WRAPPER_FACTORY);
+                DEFAULT_OBJECT_WRAPPER_FACTORY, DEFAULT_REFLECTOR_FACTORY);
         // 分离代理对象链
         while (metaExecutor.hasGetter("h")) {
             Object object = metaExecutor.getValue("h");
-            metaExecutor = MetaObject.forObject(object, DEFAULT_OBJECT_FACTORY, DEFAULT_OBJECT_WRAPPER_FACTORY);
+            metaExecutor = MetaObject.forObject(object, DEFAULT_OBJECT_FACTORY, DEFAULT_OBJECT_WRAPPER_FACTORY, DEFAULT_REFLECTOR_FACTORY);
         }
         // 分离最后一个代理对象的目标类
         while (metaExecutor.hasGetter("target")) {
             Object object = metaExecutor.getValue("target");
-            metaExecutor = MetaObject.forObject(object, DEFAULT_OBJECT_FACTORY, DEFAULT_OBJECT_WRAPPER_FACTORY);
+            metaExecutor = MetaObject.forObject(object, DEFAULT_OBJECT_FACTORY, DEFAULT_OBJECT_WRAPPER_FACTORY, DEFAULT_REFLECTOR_FACTORY);
         }
 
         Object[] args = invocation.getArgs();
@@ -72,7 +74,7 @@ public class BatchInterceptor implements Interceptor {
             executor = (Executor) metaExecutor.getOriginalObject();
         }
         if (executor instanceof BatchExecutor) {
-            metaExecutor = MetaObject.forObject(executor, DEFAULT_OBJECT_FACTORY, DEFAULT_OBJECT_WRAPPER_FACTORY);
+            metaExecutor = MetaObject.forObject(executor, DEFAULT_OBJECT_FACTORY, DEFAULT_OBJECT_WRAPPER_FACTORY, DEFAULT_REFLECTOR_FACTORY);
             return this.update(metaExecutor, ms, parameterObject);
         } else {
             return executor.update(ms, parameterObject);
@@ -139,7 +141,7 @@ public class BatchInterceptor implements Interceptor {
     private Connection getConnection(Transaction transaction, Log statementLog) throws SQLException {
         Connection connection = transaction.getConnection();
         if (statementLog.isDebugEnabled()) {
-            return ConnectionLogger.newInstance(connection, statementLog);
+            return ConnectionLogger.newInstance(connection, statementLog, 0);
         } else {
             return connection;
         }

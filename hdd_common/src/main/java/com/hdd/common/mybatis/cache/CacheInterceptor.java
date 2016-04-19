@@ -22,7 +22,9 @@ import org.apache.ibatis.plugin.Intercepts;
 import org.apache.ibatis.plugin.Invocation;
 import org.apache.ibatis.plugin.Plugin;
 import org.apache.ibatis.plugin.Signature;
+import org.apache.ibatis.reflection.DefaultReflectorFactory;
 import org.apache.ibatis.reflection.MetaObject;
+import org.apache.ibatis.reflection.ReflectorFactory;
 import org.apache.ibatis.reflection.factory.DefaultObjectFactory;
 import org.apache.ibatis.reflection.factory.ObjectFactory;
 import org.apache.ibatis.reflection.wrapper.DefaultObjectWrapperFactory;
@@ -38,9 +40,8 @@ import com.hdd.common.mybatis.page.PageParameter;
 /**
  * 采用分页拦截器执行物理分页查询时，原生的Executor创建cacheKey时未能包含分页参数page，为了解决这个问题，创建了本拦截器，
  * 本拦截器会拦截CachingExecutor的query方法，在创建cacheKey时将分页参数page包含其中。 老规矩，签名里要拦截的类型只能是接口。
- * 
+ *
  * @author 湖畔微风
- * 
  */
 @Intercepts({@Signature(type = Executor.class, method = "query", args = {MappedStatement.class, Object.class,
         RowBounds.class, ResultHandler.class})})
@@ -48,6 +49,7 @@ public class CacheInterceptor implements Interceptor {
     private static final Log logger = LogFactory.getLog(CacheInterceptor.class);
     private static final ObjectFactory DEFAULT_OBJECT_FACTORY = new DefaultObjectFactory();
     private static final ObjectWrapperFactory DEFAULT_OBJECT_WRAPPER_FACTORY = new DefaultObjectWrapperFactory();
+    private static final ReflectorFactory DEFAULT_REFLECTOR_FACTORY = new DefaultReflectorFactory();
     private static String defaultPageSqlId = ".*Page$"; // 需要拦截的ID(正则匹配)
     private static String pageSqlId = ""; // 需要拦截的ID(正则匹配)
 
@@ -55,16 +57,16 @@ public class CacheInterceptor implements Interceptor {
     public Object intercept(Invocation invocation) throws Throwable {
         Executor executorProxy = (Executor) invocation.getTarget();
         MetaObject metaExecutor = MetaObject.forObject(executorProxy, DEFAULT_OBJECT_FACTORY,
-                DEFAULT_OBJECT_WRAPPER_FACTORY);
+                DEFAULT_OBJECT_WRAPPER_FACTORY, DEFAULT_REFLECTOR_FACTORY);
         // 分离代理对象链
         while (metaExecutor.hasGetter("h")) {
             Object object = metaExecutor.getValue("h");
-            metaExecutor = MetaObject.forObject(object, DEFAULT_OBJECT_FACTORY, DEFAULT_OBJECT_WRAPPER_FACTORY);
+            metaExecutor = MetaObject.forObject(object, DEFAULT_OBJECT_FACTORY, DEFAULT_OBJECT_WRAPPER_FACTORY, DEFAULT_REFLECTOR_FACTORY);
         }
         // 分离最后一个代理对象的目标类
         while (metaExecutor.hasGetter("target")) {
             Object object = metaExecutor.getValue("target");
-            metaExecutor = MetaObject.forObject(object, DEFAULT_OBJECT_FACTORY, DEFAULT_OBJECT_WRAPPER_FACTORY);
+            metaExecutor = MetaObject.forObject(object, DEFAULT_OBJECT_FACTORY, DEFAULT_OBJECT_WRAPPER_FACTORY, DEFAULT_REFLECTOR_FACTORY);
         }
         Object[] args = invocation.getArgs();
         return this.query(metaExecutor, args);
@@ -82,9 +84,9 @@ public class CacheInterceptor implements Interceptor {
 
     @SuppressWarnings("unchecked")
     private <E> List<E> query(MetaObject metaExecutor, MappedStatement ms, CacheKey cacheKey, Object parameterObject,
-            RowBounds rowBounds, ResultHandler resultHandler, BoundSql boundSql) throws SQLException {
+                              RowBounds rowBounds, ResultHandler resultHandler, BoundSql boundSql) throws SQLException {
         MetaObject metaParameter = MetaObject.forObject(parameterObject, DEFAULT_OBJECT_FACTORY,
-                DEFAULT_OBJECT_WRAPPER_FACTORY);
+                DEFAULT_OBJECT_WRAPPER_FACTORY, DEFAULT_REFLECTOR_FACTORY);
         // 当需要分页查询时，缓存里加入page信息
         if (ms.getId().matches(pageSqlId) && metaParameter.hasGetter("page")) {
             Cache cache = ms.getCache();
@@ -158,7 +160,7 @@ public class CacheInterceptor implements Interceptor {
         }
 
         MetaObject metaObject = MetaObject.forObject(parameterObject, DEFAULT_OBJECT_FACTORY,
-                DEFAULT_OBJECT_WRAPPER_FACTORY);
+                DEFAULT_OBJECT_WRAPPER_FACTORY, DEFAULT_REFLECTOR_FACTORY);
 
         if (parameterMappings.size() > 0 && parameterObject != null) {
             TypeHandlerRegistry typeHandlerRegistry = ms.getConfiguration().getTypeHandlerRegistry();
