@@ -19,7 +19,9 @@ import org.apache.ibatis.plugin.Intercepts;
 import org.apache.ibatis.plugin.Invocation;
 import org.apache.ibatis.plugin.Plugin;
 import org.apache.ibatis.plugin.Signature;
+import org.apache.ibatis.reflection.DefaultReflectorFactory;
 import org.apache.ibatis.reflection.MetaObject;
+import org.apache.ibatis.reflection.ReflectorFactory;
 import org.apache.ibatis.reflection.factory.DefaultObjectFactory;
 import org.apache.ibatis.reflection.factory.ObjectFactory;
 import org.apache.ibatis.reflection.wrapper.DefaultObjectWrapperFactory;
@@ -39,6 +41,7 @@ public class PageInterceptor implements Interceptor {
     private static final Log logger = LogFactory.getLog(PageInterceptor.class);
     private static final ObjectFactory DEFAULT_OBJECT_FACTORY = new DefaultObjectFactory();
     private static final ObjectWrapperFactory DEFAULT_OBJECT_WRAPPER_FACTORY = new DefaultObjectWrapperFactory();
+    private static final ReflectorFactory DEFAULT_REFLECTOR_FACTORY = new DefaultReflectorFactory();
     private static String defaultDialect = "mysql"; // 数据库类型(默认为mysql)
     private static String defaultPageSqlId = ".*Page$"; // 需要拦截的ID(正则匹配)
     private static String dialect = ""; // 数据库类型(默认为mysql)
@@ -47,16 +50,16 @@ public class PageInterceptor implements Interceptor {
     @Override
     public Object intercept(Invocation invocation) throws Throwable {
         StatementHandler statementHandler = (StatementHandler) invocation.getTarget();
-        MetaObject metaStatementHandler = MetaObject.forObject(statementHandler, DEFAULT_OBJECT_FACTORY, DEFAULT_OBJECT_WRAPPER_FACTORY);
+        MetaObject metaStatementHandler = MetaObject.forObject(statementHandler, DEFAULT_OBJECT_FACTORY, DEFAULT_OBJECT_WRAPPER_FACTORY, DEFAULT_REFLECTOR_FACTORY);
         // 分离代理对象链(由于目标类可能被多个拦截器拦截，从而形成多次代理，通过下面的两次循环可以分离出最原始的的目标类)
         while (metaStatementHandler.hasGetter("h")) {
             Object object = metaStatementHandler.getValue("h");
-            metaStatementHandler = MetaObject.forObject(object, DEFAULT_OBJECT_FACTORY, DEFAULT_OBJECT_WRAPPER_FACTORY);
+            metaStatementHandler = MetaObject.forObject(object, DEFAULT_OBJECT_FACTORY, DEFAULT_OBJECT_WRAPPER_FACTORY, DEFAULT_REFLECTOR_FACTORY);
         }
         // 分离最后一个代理对象的目标类
         while (metaStatementHandler.hasGetter("target")) {
             Object object = metaStatementHandler.getValue("target");
-            metaStatementHandler = MetaObject.forObject(object, DEFAULT_OBJECT_FACTORY, DEFAULT_OBJECT_WRAPPER_FACTORY);
+            metaStatementHandler = MetaObject.forObject(object, DEFAULT_OBJECT_FACTORY, DEFAULT_OBJECT_WRAPPER_FACTORY, DEFAULT_REFLECTOR_FACTORY);
         }
         Configuration configuration = (Configuration) metaStatementHandler.getValue("delegate.configuration");
         dialect = configuration.getVariables().getProperty("dialect");
@@ -108,6 +111,8 @@ public class PageInterceptor implements Interceptor {
      */
     private void setPageParameter(String sql, Connection connection, MappedStatement mappedStatement, BoundSql boundSql,
             PageParameter page, Configuration configuration) {
+        // 统计前去掉sql语句中的order by
+        sql = sql.split("order[\\s]+by")[0];
         // 记录总记录数
         String countSql = "select count(1) from (" + sql + ") total";
         PreparedStatement countStmt = null;
@@ -120,7 +125,7 @@ public class PageInterceptor implements Interceptor {
             // 从原有BoundSql中获取参数映射，设置到count的BoundSql中，这样就可以在配置文件中使用bind标签
             for (ParameterMapping pm : boundSql.getParameterMappings()) {
                 String property = pm.getProperty();
-                if (null != property && "" != property) {
+                if (null != property && !"".equals(property)) {
                     Object value = boundSql.getAdditionalParameter(property);
                     if (value != null) {
                         countBS.setAdditionalParameter(property, value);
@@ -142,13 +147,17 @@ public class PageInterceptor implements Interceptor {
             logger.error("Ignore this exception", e);
         } finally {
             try {
-                rs.close();
-            } catch (SQLException e) {
+                if (rs != null) {
+                    rs.close();
+                }
+            } catch (Exception e) {
                 logger.error("Ignore this exception", e);
             }
             try {
-                countStmt.close();
-            } catch (SQLException e) {
+                if (countStmt != null) {
+                    countStmt.close();
+                }
+            } catch (Exception e) {
                 logger.error("Ignore this exception", e);
             }
         }
@@ -181,6 +190,8 @@ public class PageInterceptor implements Interceptor {
             boolean resetFlag = (page.getCurrentPage() - 1) * page.getPageSize() > page.getTotalCount();
             if (resetFlag || (page.getCurrentPage() > page.getTotalPage())) {
                 page.setCurrentPage(page.getTotalPage() == 0 ? 1 : page.getTotalPage());
+            } else {
+                page.setCurrentPage(page.getCurrentPage());
             }
 
             StringBuilder pageSql = new StringBuilder();
@@ -226,6 +237,8 @@ public class PageInterceptor implements Interceptor {
         int beginrow = (page.getCurrentPage() - 1) * page.getPageSize();
         int endrow = page.getCurrentPage() * page.getPageSize();
 
+        // 对sql中有union关键字的sql还不能处理。
+
         // 临时表随机命名，防止名称冲突
         String temp = "#temp" + new Random().nextInt(1000000);
         String fromSql = sql.substring(sql.indexOf("from"));
@@ -239,10 +252,14 @@ public class PageInterceptor implements Interceptor {
                 order = "desc";
                 fromSql = fromSql.substring(0, fromSql.lastIndexOf("asc")) + order;
             }
+            if(fromSql.lastIndexOf("desc") > 0 || fromSql.lastIndexOf("asc") > 0){
+                endrow = page.getTotalCount() - ((page.getCurrentPage() - 1) * page.getPageSize());
+                beginrow = page.getTotalCount() - (page.getCurrentPage() * page.getPageSize());
+            }
             tempOrder = "desc";
         }
-
-        pageSql.append("select top ").append(endrow).append(" *,rownum=identity(int) into ").append(temp).append(" ");
+        String column = getSqlColumn(sql);
+        pageSql.append("select top ").append(endrow).append(" ").append(column != null ? column : "*").append(",rownum=identity(int) into ").append(temp).append(" ");
         pageSql.append(fromSql).append(" ");
         pageSql.append("select * from ").append(temp).append(" where rownum > ").append(beginrow).append(" order by rownum ")
                 .append(tempOrder).append(" ");
@@ -277,6 +294,24 @@ public class PageInterceptor implements Interceptor {
         } else {
             return target;
         }
+    }
+
+    /**
+     * 通过正则表达式截取Sql中所有列
+     *
+     * @param sql
+     * @return
+     */
+    private String getSqlColumn(String sql) {
+        // (?!) 忽略正则表达式大小写 或者可以用 Pattern.compile(rexp,Pattern.CASE_INSENSITIVE)表示整体都忽略大小写
+        Pattern p = Pattern.compile("(?i)^select.+from");
+        // 将Sql中的换行符（\r\n）以及制表（\t）替换为空格
+        Matcher m = p.matcher(sql.trim().replaceAll("\\t", " ").replaceAll("\\r","").replaceAll("\\n",""));
+        String column = null;
+        while (m.find()) {
+            column = m.group().replaceAll("^select", "").replaceAll("from$", "");
+        }
+        return column;
     }
 
     @Override
