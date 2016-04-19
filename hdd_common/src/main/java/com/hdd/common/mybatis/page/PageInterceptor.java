@@ -6,6 +6,8 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Properties;
 import java.util.Random;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.apache.ibatis.executor.parameter.ParameterHandler;
 import org.apache.ibatis.executor.statement.StatementHandler;
@@ -32,9 +34,8 @@ import org.apache.ibatis.session.RowBounds;
 
 /**
  * 通过拦截<code>StatementHandler</code>的<code>prepare</code>方法，重写sql语句实现物理分页。 目前支持mysql、oracle和sybase的分页，其它数据库暂不支持。
- * 
+ *
  * @author 湖畔微风
- * 
  */
 @Intercepts({@Signature(type = StatementHandler.class, method = "prepare", args = {Connection.class})})
 public class PageInterceptor implements Interceptor {
@@ -101,7 +102,7 @@ public class PageInterceptor implements Interceptor {
 
     /**
      * 从数据库里查询总的记录数并计算总页数，回写进分页参数<code>PageParameter</code>,这样调用者就可用通过 分页参数 <code>PageParameter</code>获得相关信息。
-     * 
+     *
      * @param sql
      * @param connection
      * @param mappedStatement
@@ -110,7 +111,7 @@ public class PageInterceptor implements Interceptor {
      * @param configuration
      */
     private void setPageParameter(String sql, Connection connection, MappedStatement mappedStatement, BoundSql boundSql,
-            PageParameter page, Configuration configuration) {
+                                  PageParameter page, Configuration configuration) {
         // 统计前去掉sql语句中的order by
         sql = sql.split("order[\\s]+by")[0];
         // 记录总记录数
@@ -165,7 +166,7 @@ public class PageInterceptor implements Interceptor {
 
     /**
      * 对SQL参数(?)设值
-     * 
+     *
      * @param ps
      * @param mappedStatement
      * @param boundSql
@@ -180,7 +181,7 @@ public class PageInterceptor implements Interceptor {
 
     /**
      * 根据数据库类型，生成特定的分页sql
-     * 
+     *
      * @param sql
      * @param page
      * @return
@@ -212,7 +213,7 @@ public class PageInterceptor implements Interceptor {
 
     /**
      * mysql的分页语句
-     * 
+     *
      * @param sql
      * @param page
      * @return String
@@ -227,12 +228,12 @@ public class PageInterceptor implements Interceptor {
 
     /**
      * 使用临时表完成分页.为防止临时表数据过大，当查询的数据起始数超过总数的一半后， 采用逆序的方式查询数据，并在临时表里再采用相反的顺序将数据重新排序。 因此在使用 sybase分页查询时，必须显示的指定排序字段和排序顺序。
-     * 
+     *
      * @param sql
      * @param page
      * @return String
      */
-    public static StringBuilder buildPageSqlForSybase(String sql, PageParameter page) {
+    public StringBuilder buildPageSqlForSybase(String sql, PageParameter page) {
         StringBuilder pageSql = new StringBuilder(100);
         int beginrow = (page.getCurrentPage() - 1) * page.getPageSize();
         int endrow = page.getCurrentPage() * page.getPageSize();
@@ -252,7 +253,7 @@ public class PageInterceptor implements Interceptor {
                 order = "desc";
                 fromSql = fromSql.substring(0, fromSql.lastIndexOf("asc")) + order;
             }
-            if(fromSql.lastIndexOf("desc") > 0 || fromSql.lastIndexOf("asc") > 0){
+            if (fromSql.lastIndexOf("desc") > 0 || fromSql.lastIndexOf("asc") > 0) {
                 endrow = page.getTotalCount() - ((page.getCurrentPage() - 1) * page.getPageSize());
                 beginrow = page.getTotalCount() - (page.getCurrentPage() * page.getPageSize());
             }
@@ -269,7 +270,7 @@ public class PageInterceptor implements Interceptor {
 
     /**
      * 参考hibernate的实现完成oracle的分页
-     * 
+     *
      * @param sql
      * @param page
      * @return String
@@ -306,7 +307,7 @@ public class PageInterceptor implements Interceptor {
         // (?!) 忽略正则表达式大小写 或者可以用 Pattern.compile(rexp,Pattern.CASE_INSENSITIVE)表示整体都忽略大小写
         Pattern p = Pattern.compile("(?i)^select.+from");
         // 将Sql中的换行符（\r\n）以及制表（\t）替换为空格
-        Matcher m = p.matcher(sql.trim().replaceAll("\\t", " ").replaceAll("\\r","").replaceAll("\\n",""));
+        Matcher m = p.matcher(sql.trim().replaceAll("\\t", " ").replaceAll("\\r", "").replaceAll("\\n", ""));
         String column = null;
         while (m.find()) {
             column = m.group().replaceAll("^select", "").replaceAll("from$", "");
